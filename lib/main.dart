@@ -1,9 +1,33 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:english_words/english_words.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:path_provider/path_provider.dart';
 
 void main() {
   runApp(MyApp());
+}
+
+Future<void> createFile(var favorites) async {
+  final directory = await getApplicationDocumentsDirectory();
+  final file = File('${directory.path}/favorites.json');
+  await file.writeAsString(jsonEncode(favorites));
+}
+
+Future<List<String>> readFile() async {
+  final directory = await getApplicationDocumentsDirectory();
+  final file = File('${directory.path}/favorites.json');
+  if (await file.exists()) {
+    var json = jsonDecode(await file.readAsString());
+    var pairs = <String>[];
+    for (var x in json) {
+      pairs.add(x);
+    }
+    return pairs;
+  }
+  return <String>[];
 }
 
 class MyApp extends StatelessWidget {
@@ -28,28 +52,34 @@ class MyApp extends StatelessWidget {
 
 class MyAppState extends ChangeNotifier {
   var current = WordPair.random();
+  var favorites = <String>[];
 
   void getNext() {
     current = WordPair.random();
     notifyListeners();
   }
 
-  var favorites = <WordPair>[];
-
-  void toggleFavorite() {
-    if (favorites.contains(current)) {
-      favorites.remove(current);
+  void toggleFavorite() async {
+    final currentString = current.toString();
+    if (favorites.contains(currentString)) {
+      favorites.remove(currentString);
     } else {
-      favorites.add(current);
+      favorites.add(currentString);
     }
+    await createFile(favorites);
     notifyListeners();
   }
 
-  void deleteFavorite(var pair) {
+  void deleteFavorite(String pair) {
     if (favorites.contains(pair)) {
       favorites.remove(pair);
       notifyListeners();
     }
+  }
+
+  void read() async {
+    favorites = await readFile();
+    notifyListeners();
   }
 
   void clearFavorites() {
@@ -65,6 +95,12 @@ class MyHomePage extends StatefulWidget {
 
 class _MyHomePageState extends State<MyHomePage> {
   var selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    Provider.of<MyAppState>(context, listen: false).read();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +154,7 @@ class GeneratorPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var appState = context.watch<MyAppState>();
-    var pair = appState.current;
+    var pair = appState.current.toString();
 
     IconData icon;
     if (appState.favorites.contains(pair)) {
@@ -131,7 +167,21 @@ class GeneratorPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          BigCard(pair: pair),
+          Card(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: SizedBox(
+                  width: pair.length * 20,
+                  height: 100,
+                  child: LayoutBuilder(builder: (context, constraints) {
+                    double fontSize = constraints.maxWidth /
+                        5; // Adjust this factor as needed
+                    return Center(
+                        child: Text(pair,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontSize: fontSize,
+                            )));
+                  }))),
           SizedBox(height: 10),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -185,7 +235,7 @@ class FavoritesPage extends StatelessWidget {
             icon: Icon(Icons.delete),
             onPressed: () => appState.deleteFavorite(pair),
           ),
-          title: Text(pair.asLowerCase),
+          title: Text(pair),
           enabled: true,
         ),
     ]);
